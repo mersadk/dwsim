@@ -2,6 +2,8 @@
 using DWSIM.UI.Web.Services;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using Microsoft.Web.WebView2.Wpf;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -16,6 +18,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using CoreWebView2CreationProperties = Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties;
 
 
 
@@ -71,6 +74,7 @@ namespace DWSIM.UI.Web
                 UserDataFolder = USER_DATA_FOLDER
             };
 
+           
 
             webView.CoreWebView2InitializationCompleted += WebView_CoreWebView2InitializationCompleted;
 
@@ -96,14 +100,74 @@ namespace DWSIM.UI.Web
             };
         }
 
+        private void OnConsoleMessage(object sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+        {
+            if (e?.ParameterObjectAsJson == null)
+                return;
+
+            try
+            {
+                // Handles Log.entryAdded (browser/network errors, CSP violations, etc.)
+                dynamic logEntry = JsonConvert.DeserializeObject(e.ParameterObjectAsJson);
+                string level = logEntry?.entry?.level?.ToString();
+                string text  = logEntry?.entry?.text?.ToString();
+
+                if (level == "error" && text != null)
+                    Logger.LogError($"[WebView2 Log] {text}", null);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to parse CDP Log.entryAdded message.", ex);
+            }
+        }
+
+        private void OnConsoleApiMessage(object sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+        {
+            if (e?.ParameterObjectAsJson == null)
+                return;
+
+            try
+            {
+                // Handles Runtime.consoleAPICalled — captures console.error(), console.warn(), etc.
+                dynamic msg  = JsonConvert.DeserializeObject(e.ParameterObjectAsJson);
+                string type  = msg?.type?.ToString();
+
+                if (type != "error" && type != "warning")
+                    return;
+
+                var args = msg?.args;
+                var parts = new System.Text.StringBuilder();
+                if (args != null)
+                {
+                    foreach (var arg in args)
+                    {
+                        string value = arg?.value?.ToString() ?? arg?.description?.ToString();
+                        if (value != null)
+                            parts.Append(value).Append(' ');
+                    }
+                }
+
+                string text = parts.ToString().TrimEnd();
+                if (string.IsNullOrEmpty(text))
+                    return;
+
+                if (type == "error")
+                    Logger.LogError($"[WebView2 console.error] {text}", null);
+                else
+                    Logger.LogInfo($"[WebView2 console.warn] {text}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to parse CDP Runtime.consoleAPICalled message.", ex);
+            }
+        }
+
         private void WebView_CoreWebView2InitializationCompleted(object sender, CoreWebView2InitializationCompletedEventArgs e)
         {
             try
             {
                 if (_isDisposing || this.IsDisposed || webView.IsDisposed)
                     return;
-
-
 
                 if (webView.CoreWebView2 != null)
                 {
@@ -135,16 +199,23 @@ namespace DWSIM.UI.Web
 
                     webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
 
-
-
-
                     webView.CoreWebView2.NavigationCompleted += (s, args) =>
                     {
                         if (!args.IsSuccess)
-                        {
                             Logger.LogError($"Navigation failed: {args.WebErrorStatus}", null);
-                        }
                     };
+
+                    // Log.entryAdded: browser/network errors, CSP violations, unhandled exceptions
+                    webView.CoreWebView2.GetDevToolsProtocolEventReceiver("Log.entryAdded")
+                        .DevToolsProtocolEventReceived += OnConsoleMessage;
+
+                    // Runtime.consoleAPICalled: console.error(), console.warn(), console.log(), etc.
+                    webView.CoreWebView2.GetDevToolsProtocolEventReceiver("Runtime.consoleAPICalled")
+                        .DevToolsProtocolEventReceived += OnConsoleApiMessage;
+
+                    // Enable both CDP domains so events actually fire
+                    _ = webView.CoreWebView2.CallDevToolsProtocolMethodAsync("Log.enable", "{}");
+                    _ = webView.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.enable", "{}");
                 }
             }
             catch (Exception ex)
