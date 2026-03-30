@@ -113,7 +113,7 @@ namespace DWSIM.UI.Web
                 string text  = logEntry?.entry?.text?.ToString();
 
                 if (level == "error" && text != null)
-                    Logger.LogError($"[WebView2 Log] {text}", null);
+                    Logger.LogError($"[WebView2 Log] {text}"+Environment.NewLine + e.ParameterObjectAsJson, null);
             }
             catch (Exception ex)
             {
@@ -152,9 +152,9 @@ namespace DWSIM.UI.Web
                     return;
 
                 if (type == "error")
-                    Logger.LogError($"[WebView2 console.error] {text}", null);
+                    Logger.LogError($"[WebView2 console.error] {text}"+Environment.NewLine + e.ParameterObjectAsJson, null);
                 else
-                    Logger.LogInfo($"[WebView2 console.warn] {text}");
+                    Logger.LogInfo($"[WebView2 console.warn] {text}"+Environment.NewLine + e.ParameterObjectAsJson);
             }
             catch (Exception ex)
             {
