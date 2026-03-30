@@ -153,8 +153,7 @@ namespace DWSIM.UI.Web
 
                 if (type == "error")
                     Logger.LogError($"[WebView2 console.error] {text}"+Environment.NewLine + e.ParameterObjectAsJson, null);
-                else
-                    Logger.LogInfo($"[WebView2 console.warn] {text}"+Environment.NewLine + e.ParameterObjectAsJson);
+            
             }
             catch (Exception ex)
             {
