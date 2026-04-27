@@ -233,15 +233,8 @@ namespace DWSIM.UI.Web
                 {
                     Logger.LogInfo($"Attempting to initialize WebView2 (attempt {i + 1}/{retries})");
 
-
-
-
-
-
                     if (token.IsCancellationRequested || _isDisposing || this.IsDisposed)
-                        return;
-
-
+                        throw new Exception("Trying to initialze WebView2 on disposed WebUIForm.");
 
                     if (webView == null || webView.IsDisposed)
                     {

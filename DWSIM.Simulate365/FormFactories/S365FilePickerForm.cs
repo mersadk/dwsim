@@ -60,14 +60,14 @@ namespace DWSIM.Simulate365.FormFactories
             }
             else
             {
-                _webUIForm?.RealoadPage();
+                _webUIForm.RealoadPage();
             }
-            //_webUIForm?.Navigate(_webUIForm?.InitialUrl);
+            //_webUIForm.Navigate(_webUIForm.InitialUrl);
         }       
 
         private void _filePickerService_S365DashboardFolderCreated(object sender, EventArgs e)
         {
-            _webUIForm?.RealoadPage();
+            _webUIForm.RealoadPage();
         }
 
         private void FilePickerService_S365DashboardSaveFileClicked(object sender, S365DashboardSaveFile e)
@@ -75,7 +75,8 @@ namespace DWSIM.Simulate365.FormFactories
             UsubscribeFromEvents();
 
             // Close window
-            _webUIForm?.SafeClose();
+            _webUIForm.SafeClose();
+            _webUIForm = null;
         }
         private void UsubscribeFromEvents()
         {
@@ -89,13 +90,15 @@ namespace DWSIM.Simulate365.FormFactories
         {
             UsubscribeFromEvents();
             // Close window
-            _webUIForm?.SafeClose();
+            _webUIForm.SafeClose();
+            _webUIForm = null;
         }
 
         public void Close()
         {
             UsubscribeFromEvents();
-            _webUIForm?.SafeClose();
+            _webUIForm.SafeClose();
+            _webUIForm = null;
         }
 
         public S365File ShowSaveDialog(List<string> fileFormats = null, bool isSaveAs = false, bool isLeavingCollaborationFile = false)
