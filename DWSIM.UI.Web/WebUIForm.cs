@@ -36,7 +36,7 @@ namespace DWSIM.UI.Web
         public bool UseLocalUI { get; private set; }
         public Dictionary<string, object> HostedObjects { get; set; } = new Dictionary<string, object>();
 
-        private volatile bool _isDisposing = false;
+        private bool _isDisposing = false;
         private CancellationTokenSource _initializationCts;
 
         public WebUIForm(string initialUrl, string title = null, bool userLocalUI = false)

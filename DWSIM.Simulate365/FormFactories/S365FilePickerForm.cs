@@ -75,8 +75,7 @@ namespace DWSIM.Simulate365.FormFactories
             UsubscribeFromEvents();
 
             // Close window
-            _webUIForm?.Close();
-            _webUIForm?.Dispose();
+            _webUIForm?.SafeClose();
         }
         private void UsubscribeFromEvents()
         {
@@ -90,15 +89,13 @@ namespace DWSIM.Simulate365.FormFactories
         {
             UsubscribeFromEvents();
             // Close window
-            _webUIForm?.Close();
-            _webUIForm?.Dispose();
+            _webUIForm?.SafeClose();
         }
 
         public void Close()
         {
             UsubscribeFromEvents();
-            _webUIForm?.Close();
-            _webUIForm?.Dispose();
+            _webUIForm?.SafeClose();
         }
 
         public S365File ShowSaveDialog(List<string> fileFormats = null, bool isSaveAs = false, bool isLeavingCollaborationFile = false)
