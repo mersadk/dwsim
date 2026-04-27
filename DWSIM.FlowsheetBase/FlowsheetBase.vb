@@ -109,10 +109,7 @@ Imports DWSIM.ExtensionMethods
 
     Public Sub TriggerNewDataLoadedEvent(sender As Object, e As INewDataLoadedEventArgs) Implements IFlowsheet.TriggerNewDataLoadedEvent
 
-
-
     End Sub
-
 
     Public Sub SetResourcesManager(_rm As Resources.ResourceManager)
         rm = _rm

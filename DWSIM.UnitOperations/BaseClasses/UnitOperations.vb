@@ -1,5 +1,5 @@
-'    Flowsheet Object Base Classes 
-'    Copyright 2008-2020 Daniel Wagner O. de Medeiros
+'    Unit Operation Base Classes 
+'    Copyright 2008-2026 Daniel Wagner O. de Medeiros
 '
 '    This file is part of DWSIM.
 '
@@ -53,6 +53,18 @@ Namespace UnitOperations
         Public Overridable ReadOnly Property SupportsParticleSizeDistributions As Boolean = False
 
         Public Overridable ReadOnly Property SupportsRestoreStateAfterError As Boolean = True
+
+        Private _AttachedExtensions As List(Of IUnitOperationExtension)
+
+        Public Property AttachedExtensions As List(Of IUnitOperationExtension) Implements IUnitOperation.AttachedExtensions
+            Get
+                If _AttachedExtensions Is Nothing Then _AttachedExtensions = New List(Of IUnitOperationExtension)
+                Return _AttachedExtensions
+            End Get
+            Set(value As List(Of IUnitOperationExtension))
+                _AttachedExtensions = value
+            End Set
+        End Property
 
         Public Sub New()
 

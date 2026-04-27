@@ -289,11 +289,15 @@ Public Class FormMain
 
 #If Not WINE32 Then
 
+        'load unit operation extensions
+
+        Dim dlls = LoadExtenderDLLs()
+
         'load extenders
 
         Dim sw As New StringBuilder()
 
-        Dim extlist As List(Of IExtenderCollection) = GetExtenders(LoadExtenderDLLs())
+        Dim extlist As List(Of IExtenderCollection) = GetExtenders(dlls)
 
         For Each extender In extlist
             If Not Extenders.ContainsKey(extender.ID) Then
