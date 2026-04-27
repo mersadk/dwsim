@@ -36,7 +36,7 @@ namespace DWSIM.UI.Web
         public bool UseLocalUI { get; private set; }
         public Dictionary<string, object> HostedObjects { get; set; } = new Dictionary<string, object>();
 
-        private bool _isDisposing = false;
+        private volatile bool _isDisposing = false;
         private CancellationTokenSource _initializationCts;
 
         public WebUIForm(string initialUrl, string title = null, bool userLocalUI = false)
@@ -74,7 +74,7 @@ namespace DWSIM.UI.Web
                 UserDataFolder = USER_DATA_FOLDER
             };
 
-           
+
 
             webView.CoreWebView2InitializationCompleted += WebView_CoreWebView2InitializationCompleted;
 
@@ -110,10 +110,10 @@ namespace DWSIM.UI.Web
                 // Handles Log.entryAdded (browser/network errors, CSP violations, etc.)
                 dynamic logEntry = JsonConvert.DeserializeObject(e.ParameterObjectAsJson);
                 string level = logEntry?.entry?.level?.ToString();
-                string text  = logEntry?.entry?.text?.ToString();
+                string text = logEntry?.entry?.text?.ToString();
 
                 if (level == "error" && text != null)
-                    Logger.LogError($"[WebView2 Log] {text}"+Environment.NewLine + e.ParameterObjectAsJson, null);
+                    Logger.LogError($"[WebView2 Log] {text}" + Environment.NewLine + e.ParameterObjectAsJson, null);
             }
             catch (Exception ex)
             {
@@ -129,8 +129,8 @@ namespace DWSIM.UI.Web
             try
             {
                 // Handles Runtime.consoleAPICalled — captures console.error(), console.warn(), etc.
-                dynamic msg  = JsonConvert.DeserializeObject(e.ParameterObjectAsJson);
-                string type  = msg?.type?.ToString();
+                dynamic msg = JsonConvert.DeserializeObject(e.ParameterObjectAsJson);
+                string type = msg?.type?.ToString();
 
                 if (type != "error" && type != "warning")
                     return;
@@ -152,8 +152,8 @@ namespace DWSIM.UI.Web
                     return;
 
                 if (type == "error")
-                    Logger.LogError($"[WebView2 console.error] {text}"+Environment.NewLine + e.ParameterObjectAsJson, null);
-            
+                    Logger.LogError($"[WebView2 console.error] {text}" + Environment.NewLine + e.ParameterObjectAsJson, null);
+
             }
             catch (Exception ex)
             {
@@ -265,14 +265,19 @@ namespace DWSIM.UI.Web
                                                  CoreWebView2Environment.CreateAsync(null, USER_DATA_FOLDER, null),
                                                  TimeSpan.FromSeconds(5),
                                                  token);
-
                     if (token.IsCancellationRequested || _isDisposing || this.IsDisposed || webView.IsDisposed)
+                    {
+                        Logger.LogError("InitializeAsync: aborting after EnsureCoreWebView2Async — form is disposing or disposed.", null);
                         return;
+                    }
 
                     await webView.EnsureCoreWebView2Async(environment);
 
                     if (token.IsCancellationRequested || _isDisposing || this.IsDisposed || webView.IsDisposed)
+                    {
+                        Logger.LogError("InitializeAsync: aborting after EnsureCoreWebView2Async — form is disposing or disposed.", null);
                         return;
+                    }
 
                     if (webView.CoreWebView2 == null)
                     {
@@ -520,18 +525,19 @@ namespace DWSIM.UI.Web
 
         private static async Task<T> WaitAsync<T>(Task<T> task, TimeSpan timeout, CancellationToken token)
         {
-            var timeoutCts = new CancellationTokenSource(timeout);
-            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
-
-            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-            using (linkedCts.Token.Register(() => tcs.TrySetCanceled(linkedCts.Token)))
+            using (var timeoutCts = new CancellationTokenSource(timeout))
+            using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token))
             {
-                var completed = await Task.WhenAny(task, tcs.Task);
-                if (completed == tcs.Task)
-                    throw new TaskCanceledException();
+                var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-                return await task; // unwrap result
+                using (linkedCts.Token.Register(() => tcs.TrySetCanceled(linkedCts.Token)))
+                {
+                    var completed = await Task.WhenAny(task, tcs.Task);
+                    if (completed == tcs.Task)
+                        throw new TaskCanceledException();
+
+                    return await task;
+                }
             }
         }
     }
