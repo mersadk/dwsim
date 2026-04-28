@@ -1,4 +1,5 @@
 ﻿using DWSIM.Interfaces;
+using DWSIM.Logging;
 using DWSIM.Simulate365.Models;
 using DWSIM.Simulate365.Services;
 using DWSIM.UI.Web;
@@ -112,36 +113,25 @@ namespace DWSIM.Simulate365.FormFactories
             var navigationPath = "filepicker/save";
             var queryParams = new Dictionary<string, string>();
             if (fileFormats != null && fileFormats.Count > 0)
-            {
                 queryParams.Add("extensions", string.Join("_", fileFormats));
-            }
+
             if (!string.IsNullOrWhiteSpace(SuggestedDirectory))
             {
-
                 // If user has opened collaboration file, and tries to save that file he will get wrong SuggestedDirectory.
                 // We could compare OwnerId of opened file with currentUserId, but getting opened file data from here is issue.
                 // For now we will just disable setting suggestedDirectory inside save form if collaboration is enabled.
                 if (!CollaborationEnabled)
-                {
                     queryParams.Add("directory", HttpUtility.UrlEncode(SuggestedDirectory));
-                }
-
             }
 
             if (isSaveAs)
-            {
                 queryParams.Add("saveAs", "true");
-            }
 
             if (isLeavingCollaborationFile)
-            {
                 queryParams.Add("leavingCollaborationFile", "true");
-            }
 
             if (!string.IsNullOrWhiteSpace(SuggestedFilename))
-            {
                 queryParams.Add("filename", HttpUtility.UrlEncode(SuggestedFilename));
-            }
 
             var initialUrl = $"{navigationPath}";
             if (queryParams.Any())
@@ -231,19 +221,38 @@ namespace DWSIM.Simulate365.FormFactories
 
         private void Browser_CoreWebView2InitializationCompleted(object sender, CoreWebView2InitializationCompletedEventArgs e)
         {
+            var webView = sender as WebView2;
+            if (webView == null)
+            {
+                Logger.LogError("S365FilePickerForm: initialization callback sender is not WebView2.", null);
+                return;
+            }
+
+            if (!e.IsSuccess)
+            {
+                Logger.LogError("S365FilePickerForm: WebView2 initialization failed.", e.InitializationException);
+                return;
+            }
+
+            if (webView.CoreWebView2 == null)
+            {
+                Logger.LogError("S365FilePickerForm: CoreWebView2 is null after successful initialization.", null);
+                return;
+            }
+
+            TryAddHostObject(webView, "authService", new AuthService());
+            TryAddHostObject(webView, "filePickerService", _filePickerService);
+        }
+
+        private void TryAddHostObject(WebView2 webView, string objectName, object hostObject)
+        {
             try
             {
-                var webView = sender as WebView2;
-                if (webView.CoreWebView2 != null)
-                {
-                    webView.CoreWebView2.AddHostObjectToScript("authService", new AuthService());
-                    webView.CoreWebView2.AddHostObjectToScript("filePickerService", _filePickerService);
-                }
+                webView.CoreWebView2.AddHostObjectToScript(objectName, hostObject);
             }
             catch (Exception ex)
             {
-
-                //  throw;
+                Logger.LogError($"S365FilePickerForm: failed to add host object '{objectName}'.", ex);
             }
         }
 
