@@ -58,9 +58,6 @@ namespace DWSIM.UI.Web
             // After all variables are set, then initialize form components
             InitializeComponent();
 
-
-
-
             // Title
             // Must be called after initialize components
             if (!String.IsNullOrWhiteSpace(title))
@@ -74,15 +71,27 @@ namespace DWSIM.UI.Web
                 UserDataFolder = USER_DATA_FOLDER
             };
 
-
-
             webView.CoreWebView2InitializationCompleted += WebView_CoreWebView2InitializationCompleted;
-
 
             this.Shown += async (_, __) =>
             {
+                // WebView2's EnsureCoreWebView2Async and all subsequent control access MUST
+                // run on a thread with a WindowsFormsSynchronizationContext so that async
+                // continuations are posted back to this thread's message loop rather than
+                // falling through to thread-pool threads.
+                // This guard is necessary when ShowDialog() is called from a non-main thread
+                // (e.g. a COM dispatch thread or a task continuation) that has no context set.
+                if (SynchronizationContext.Current == null)
+                {
+                    Logger.LogInfo("Shown event in WebUIForm, switching to WindowsFormsSynchronizationContext.");
+                    SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+                }
+
                 try
                 {
+                    Logger.LogInfo("Trigger Shown event in WebUIForm.");
+
+                    // Don't subscribe with async, initialization muast happen on UI thread
                     await InitializeAsync(_initializationCts.Token);
                 }
                 catch (TaskCanceledException)
@@ -165,6 +174,11 @@ namespace DWSIM.UI.Web
         {
             try
             {
+                Logger.LogInfo("WebView2 initialization completed event triggered.");
+
+                if (!e.IsSuccess)
+                    Logger.LogError("WebView2 initialization failed", e.InitializationException);
+
                 if (_isDisposing || this.IsDisposed || webView.IsDisposed)
                     return;
 
@@ -236,41 +250,52 @@ namespace DWSIM.UI.Web
                     if (token.IsCancellationRequested || _isDisposing || this.IsDisposed)
                         throw new Exception("Trying to initialze WebView2 on disposed WebUIForm.");
 
-                    if (webView == null || webView.IsDisposed)
-                    {
-                        Logger.LogError("webView is null or disposed before initialization.", null);
-                        return;
-                    }
+                    Logger.LogInfo("MK 2");
+
+                    if (webView == null || webView.IsDisposed)                    
+                        throw new Exception("webView is null or disposed before initialization.");
+
+                    Logger.LogInfo("MK 3");
 
                     if (!webView.IsHandleCreated)
                     {
                         webView.CreateControl();
+
                         if (!webView.IsHandleCreated)
                         {
-
                             Logger.LogError("Failed to create handle for webView.", null);
                             await Task.Delay(200 * (i + 1), token);
                             continue;
                         }
                     }
 
+                    Logger.LogInfo("MK 4");
+
                     var environment = await WaitAsync(
-                                                 CoreWebView2Environment.CreateAsync(null, USER_DATA_FOLDER, null),
-                                                 TimeSpan.FromSeconds(5),
-                                                 token);
-                    if (token.IsCancellationRequested || _isDisposing || this.IsDisposed || webView.IsDisposed)
-                    {
-                        Logger.LogError("InitializeAsync: aborting after EnsureCoreWebView2Async — form is disposing or disposed.", null);
-                        return;
-                    }
+                        CoreWebView2Environment.CreateAsync(null, USER_DATA_FOLDER, null),
+                        TimeSpan.FromSeconds(5),
+                        token
+                    );
 
-                    await webView.EnsureCoreWebView2Async(environment);
+                    Logger.LogInfo("MK 5");
 
                     if (token.IsCancellationRequested || _isDisposing || this.IsDisposed || webView.IsDisposed)
-                    {
-                        Logger.LogError("InitializeAsync: aborting after EnsureCoreWebView2Async — form is disposing or disposed.", null);
-                        return;
-                    }
+                        throw new Exception("InitializeAsync: aborting after EnsureCoreWebView2Async — form is disposing or disposed.");
+
+                    Logger.LogInfo("MK 6");
+
+                    await WaitAsync(
+                        webView.EnsureCoreWebView2Async(environment),
+                        TimeSpan.FromSeconds(5),
+                        token
+                    );
+
+                    Logger.LogInfo("MK 7");
+
+                    if (token.IsCancellationRequested || _isDisposing || this.IsDisposed || webView.IsDisposed)
+                        throw new Exception("InitializeAsync: aborting after EnsureCoreWebView2Async — form is disposing or disposed.");
+
+                    Logger.LogInfo("MK 8");
 
                     if (webView.CoreWebView2 == null)
                     {
@@ -278,6 +303,8 @@ namespace DWSIM.UI.Web
                         await Task.Delay(200 * (i + 1), token);
                         continue;
                     }
+
+                    Logger.LogInfo("MK 9");
 
                     if (UseLocalUI)
                     {
@@ -290,8 +317,13 @@ namespace DWSIM.UI.Web
                             "dwsim.webui", webUiDir, CoreWebView2HostResourceAccessKind.Allow);
                     }
 
+                    Logger.LogInfo("MK 10");
+
                     webView.Source = new Uri(InitialUrl);
-                    return; // success
+
+                    Logger.LogInfo("WebView2 initialization completed.");
+
+                    return; // Exit for loop on success
                 }
                 catch (TaskCanceledException)
                 {
@@ -516,6 +548,10 @@ namespace DWSIM.UI.Web
             }
         }
 
+        /// <summary>
+        /// Awaits the specified task, cancelling it if it does not complete within the given timeout
+        /// or if the provided cancellation token is triggered.
+        /// </summary>
         private static async Task<T> WaitAsync<T>(Task<T> task, TimeSpan timeout, CancellationToken token)
         {
             using (var timeoutCts = new CancellationTokenSource(timeout))
@@ -530,6 +566,26 @@ namespace DWSIM.UI.Web
                         throw new TaskCanceledException();
 
                     return await task;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Awaits the specified task, cancelling it if it does not complete within the given timeout
+        /// or if the provided cancellation token is triggered.
+        /// </summary>
+        private static async Task WaitAsync(Task task, TimeSpan timeout, CancellationToken token)
+        {
+            using (var timeoutCts = new CancellationTokenSource(timeout))
+            using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token))
+            {
+                var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using (linkedCts.Token.Register(() => tcs.TrySetCanceled(linkedCts.Token)))
+                {
+                    var completed = await Task.WhenAny(task, tcs.Task);
+                    if (completed == tcs.Task)
+                        throw new TaskCanceledException();
+                    await task;
                 }
             }
         }

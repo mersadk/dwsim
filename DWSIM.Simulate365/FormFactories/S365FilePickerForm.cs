@@ -111,36 +111,25 @@ namespace DWSIM.Simulate365.FormFactories
             var navigationPath = "filepicker/save";
             var queryParams = new Dictionary<string, string>();
             if (fileFormats != null && fileFormats.Count > 0)
-            {
                 queryParams.Add("extensions", string.Join("_", fileFormats));
-            }
+
             if (!string.IsNullOrWhiteSpace(SuggestedDirectory))
             {
-
                 // If user has opened collaboration file, and tries to save that file he will get wrong SuggestedDirectory.
                 // We could compare OwnerId of opened file with currentUserId, but getting opened file data from here is issue.
                 // For now we will just disable setting suggestedDirectory inside save form if collaboration is enabled.
                 if (!CollaborationEnabled)
-                {
                     queryParams.Add("directory", HttpUtility.UrlEncode(SuggestedDirectory));
-                }
-
             }
 
             if (isSaveAs)
-            {
                 queryParams.Add("saveAs", "true");
-            }
 
             if (isLeavingCollaborationFile)
-            {
                 queryParams.Add("leavingCollaborationFile", "true");
-            }
 
             if (!string.IsNullOrWhiteSpace(SuggestedFilename))
-            {
                 queryParams.Add("filename", HttpUtility.UrlEncode(SuggestedFilename));
-            }
 
             var initialUrl = $"{navigationPath}";
             if (queryParams.Any())
