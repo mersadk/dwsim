@@ -5,6 +5,7 @@ using DWSIM.UI.Web;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -172,7 +173,70 @@ namespace DWSIM.Simulate365.Services
         /// </summary>
         public string GetUserToken()
         {
-            return this._accessToken;
+            if (IsJwtTokenValid(this._accessToken))
+                return this._accessToken;
+
+            try
+            {
+                var refreshed = RefreshToken().GetAwaiter().GetResult();
+                if (refreshed && IsJwtTokenValid(this._accessToken))
+                    return this._accessToken;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("An error occurred while getting user token.", ex);
+            }
+
+            return null;
+        }
+
+        private bool IsJwtTokenValid(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return false;
+
+            var parts = token.Split('.');
+            if (parts.Length != 3)
+                return false;
+
+            try
+            {
+                var payload = parts[1];
+                var payloadBytes = Base64UrlDecode(payload);
+                var payloadJson = Encoding.UTF8.GetString(payloadBytes);
+                var payloadObj = JObject.Parse(payloadJson);
+
+                var expToken = payloadObj["exp"];
+                if (expToken == null)
+                    return false;
+
+                long expUnix;
+                if (!long.TryParse(expToken.ToString(), out expUnix))
+                    return false;
+
+                var expiresAt = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
+                return expiresAt > DateTime.UtcNow.AddMinutes(5);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private byte[] Base64UrlDecode(string input)
+        {
+            var output = input.Replace('-', '+').Replace('_', '/');
+            switch (output.Length % 4)
+            {
+                case 2:
+                    output += "==";
+                    break;
+                case 3:
+                    output += "=";
+                    break;
+            }
+
+            return Convert.FromBase64String(output);
         }
 
         public void SetAccessToken(AccessTokenType accessTokenType, string accessToken, string refreshToken, DateTime expiresAt)

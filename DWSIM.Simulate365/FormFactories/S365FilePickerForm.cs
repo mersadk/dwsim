@@ -1,4 +1,5 @@
 ﻿using DWSIM.Interfaces;
+using DWSIM.Logging;
 using DWSIM.Simulate365.Models;
 using DWSIM.Simulate365.Services;
 using DWSIM.UI.Web;
@@ -6,13 +7,9 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Web;
-using System.Windows.Forms;
 
 namespace DWSIM.Simulate365.FormFactories
 {
@@ -58,16 +55,18 @@ namespace DWSIM.Simulate365.FormFactories
             {
                 AfterUserLoggedIn?.Invoke(this, new EventArgs());
             }
-            else
+            else if (_webUIForm != null)
             {
                 _webUIForm.RealoadPage();
             }
-            //_webUIForm.Navigate(_webUIForm.InitialUrl);
-        }       
+        }
 
         private void _filePickerService_S365DashboardFolderCreated(object sender, EventArgs e)
         {
-            _webUIForm.RealoadPage();
+            if (_webUIForm != null)
+            {
+                _webUIForm.RealoadPage();
+            }
         }
 
         private void FilePickerService_S365DashboardSaveFileClicked(object sender, S365DashboardSaveFile e)
@@ -225,25 +224,45 @@ namespace DWSIM.Simulate365.FormFactories
 
             _webUIForm.ShowDialog();
 
+          
             return _filePickerService.SelectedOpenFile;
         }
 
 
         private void Browser_CoreWebView2InitializationCompleted(object sender, CoreWebView2InitializationCompletedEventArgs e)
         {
+            var webView = sender as WebView2;
+            if (webView == null)
+            {
+                Logger.LogError("S365FilePickerForm: initialization callback sender is not WebView2.", null);
+                return;
+            }
+
+            if (!e.IsSuccess)
+            {
+                Logger.LogError("S365FilePickerForm: WebView2 initialization failed.", e.InitializationException);
+                return;
+            }
+
+            if (webView.CoreWebView2 == null)
+            {
+                Logger.LogError("S365FilePickerForm: CoreWebView2 is null after successful initialization.", null);
+                return;
+            }
+
+            TryAddHostObject(webView, "authService", new AuthService());
+            TryAddHostObject(webView, "filePickerService", _filePickerService);
+        }
+
+        private void TryAddHostObject(WebView2 webView, string objectName, object hostObject)
+        {
             try
             {
-                var webView = sender as WebView2;
-                if (webView.CoreWebView2 != null)
-                {
-                    webView.CoreWebView2.AddHostObjectToScript("authService", new AuthService());
-                    webView.CoreWebView2.AddHostObjectToScript("filePickerService", _filePickerService);
-                }
+                webView.CoreWebView2.AddHostObjectToScript(objectName, hostObject);
             }
             catch (Exception ex)
             {
-
-                //  throw;
+                Logger.LogError($"S365FilePickerForm: failed to add host object '{objectName}'.", ex);
             }
         }
 
