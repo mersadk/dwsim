@@ -108,10 +108,10 @@
     <None Include="dwsim-web-ui\static\css\main.f74b435b.css.map">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Include="dwsim-web-ui\static\js\453.02e6a4aa.chunk.js.map">
+    <None Include="dwsim-web-ui\static\js\453.45034f41.chunk.js.map">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Include="dwsim-web-ui\static\js\main.ce090e36.js.map">
+    <None Include="dwsim-web-ui\static\js\main.e79874a8.js.map">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Include="packages.config" />
@@ -147,13 +147,13 @@
     <Content Include="dwsim-web-ui\static\css\main.f74b435b.css">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="dwsim-web-ui\static\js\453.02e6a4aa.chunk.js">
+    <Content Include="dwsim-web-ui\static\js\453.45034f41.chunk.js">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="dwsim-web-ui\static\js\main.ce090e36.js">
+    <Content Include="dwsim-web-ui\static\js\main.e79874a8.js">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="dwsim-web-ui\static\js\main.ce090e36.js.LICENSE.txt">
+    <Content Include="dwsim-web-ui\static\js\main.e79874a8.js.LICENSE.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="dwsim-web-ui\static\media\genericfile.a118dce6bd90109248c926aedf58197f.svg">

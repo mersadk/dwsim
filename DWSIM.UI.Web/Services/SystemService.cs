@@ -1,4 +1,5 @@
 ﻿#define S365_STAGING
+using DWSIM.Logging;
 using DWSIM.UI.Web.Models;
 using DWSIM.UI.Web.Settings;
 using Newtonsoft.Json;
@@ -9,6 +10,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace DWSIM.UI.Web.Services
@@ -37,10 +39,21 @@ namespace DWSIM.UI.Web.Services
                 ContractResolver = new CamelCasePropertyNamesContractResolver()
             });
 
+        }
 
-
-
-
+        public void OnPageLoaded()
+        {
+            try
+            {
+                using (var handle = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\DWSIMWebViewLoaded"))
+                {
+                    handle.Set();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to signal Global\\DWSIMWebViewLoaded.", ex);
+            }
         }
     }
 }

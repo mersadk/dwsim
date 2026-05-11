@@ -37,7 +37,7 @@ namespace DWSIM.UI.Web
         public Dictionary<string, object> HostedObjects { get; set; } = new Dictionary<string, object>();
 
         private bool _isDisposing = false;
-        private CancellationTokenSource _initializationCts;
+        private CancellationTokenSource _initializationCts;      
 
         public WebUIForm(string initialUrl, string title = null, bool userLocalUI = false)
         {
@@ -183,7 +183,8 @@ namespace DWSIM.UI.Web
                     return;
 
                 if (webView.CoreWebView2 != null)
-                {
+                {                   
+
                     // Add hosted objects
                     foreach (var kv in HostedObjects)
                     {
@@ -235,7 +236,7 @@ namespace DWSIM.UI.Web
             {
                 Logger.LogError("An error occurred while initializing WebView2.", ex);
             }
-        }
+        }     
 
         private async Task InitializeAsync(CancellationToken token)
         {
