@@ -45,14 +45,14 @@ namespace DWSIM.UI.Web.Services
         {
             try
             {
-                using (var handle = new EventWaitHandle(false, EventResetMode.AutoReset, "Global\\DWSIMWebViewLoaded"))
+                using (var handle = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\DWSIMWebViewLoaded"))
                 {
                     handle.Set();
                 }
             }
             catch (Exception ex)
             {
-                Logger.LogError("Failed to signal Global\\DWSIMWebViewLoaded.", ex);
+                Logger.LogError("Failed to signal Local\\DWSIMWebViewLoaded.", ex);
             }
         }
     }
