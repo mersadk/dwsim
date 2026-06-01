@@ -26,8 +26,6 @@ namespace DWSIM.UI.Web
 {
     public partial class WebUIForm : Form
     {
-        public static string USER_DATA_FOLDER = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DWSIM", "S365BrowserData");
-
         public static string LOCAL_WEB_UI_DOMAIN = "https://dwsim.webui";
         public static string LOCAL_WEB_UI_URL = $"{LOCAL_WEB_UI_DOMAIN}/index.html#";
 
@@ -37,10 +35,16 @@ namespace DWSIM.UI.Web
         public Dictionary<string, object> HostedObjects { get; set; } = new Dictionary<string, object>();
 
         private bool _isDisposing = false;
-        private CancellationTokenSource _initializationCts;      
+        private CancellationTokenSource _initializationCts;
+        public static readonly string USER_DATA_FOLDER = Path.Combine(
+                                                                 Path.GetTempPath(),
+                                                                 "DWSIM",
+                                                                 "WebView2",
+                                                                 Guid.NewGuid().ToString("N"));
 
         public WebUIForm(string initialUrl, string title = null, bool userLocalUI = false)
-        {
+        {          
+
             // If userLocalUI == false, then real URL must be provided
             if (!userLocalUI && (String.IsNullOrWhiteSpace(initialUrl) || !Regex.IsMatch(initialUrl, "https*://")))
                 throw new Exception("When not using local UI, real URL must be provided.");
@@ -183,7 +187,7 @@ namespace DWSIM.UI.Web
                     return;
 
                 if (webView.CoreWebView2 != null)
-                {                   
+                {
 
                     // Add hosted objects
                     foreach (var kv in HostedObjects)
@@ -236,7 +240,7 @@ namespace DWSIM.UI.Web
             {
                 Logger.LogError("An error occurred while initializing WebView2.", ex);
             }
-        }     
+        }
 
         private async Task InitializeAsync(CancellationToken token)
         {
@@ -253,7 +257,7 @@ namespace DWSIM.UI.Web
 
                     Logger.LogInfo("MK 2");
 
-                    if (webView == null || webView.IsDisposed)                    
+                    if (webView == null || webView.IsDisposed)
                         throw new Exception("webView is null or disposed before initialization.");
 
                     Logger.LogInfo("MK 3");
@@ -499,54 +503,16 @@ namespace DWSIM.UI.Web
 
         protected override void Dispose(bool disposing)
         {
-            _isDisposing = true;
-
-            // Cancel any ongoing initialization
-            _initializationCts?.Cancel();
-            _initializationCts?.Dispose();
-            _initializationCts = null;
-
-            try
+            if (disposing)
             {
-                if (webView != null && !webView.IsDisposed)
+                try
                 {
-                    try
-                    {
-                        webView.Stop();
-
-                        if (webView.CoreWebView2 != null)
-                        {
-                            webView.CoreWebView2.Stop();
-
-                            foreach (var key in HostedObjects.Keys.ToList())
-                            {
-                                try
-                                {
-                                    webView.CoreWebView2.RemoveHostObjectFromScript(key);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Logger.LogError($"Error removing host object {key}", ex);
-                                }
-                            }
-
-                            HostedObjects.Clear();
-                        }
-                    }
-                    catch (ObjectDisposedException) { }
-                    catch (InvalidOperationException ex) when (ex.Message.Contains("disposed")) { }
-
-                    webView.CoreWebView2InitializationCompleted -= WebView_CoreWebView2InitializationCompleted;
+                    if (Directory.Exists(USER_DATA_FOLDER))
+                        Directory.Delete(USER_DATA_FOLDER, recursive: true);
                 }
+                catch { /* best effort cleanup */ }
             }
-            catch (Exception ex)
-            {
-                Logger.LogError("Error during WebView2 disposal", ex);
-            }
-            finally
-            {
-                base.Dispose(disposing);
-            }
+            base.Dispose(disposing);
         }
 
         /// <summary>
