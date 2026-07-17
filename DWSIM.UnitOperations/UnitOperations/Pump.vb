@@ -1,4 +1,4 @@
-'    Centrifugal Pump Calculation Routines 
+ï»¿'    Centrifugal Pump Calculation Routines 
 '    Copyright 2008-2014 Daniel Wagner O. de Medeiros
 '
 '    This file is part of DWSIM.
@@ -242,6 +242,19 @@ Namespace UnitOperations
         Property OutletTemperature As Double = 298.15#
 
         Public Property PumpCurveSet As New PumpOps.CurveSet
+
+        'speed the pump runs at (RPM). The performance curves are taken to have been measured at
+        'PumpCurveSet.ImpellerSpeed and are scaled to this one through the affinity laws.
+        'Zero means the pump runs at the speed the curves were measured at, leaving them unscaled.
+        Public Property OperatingSpeed As Double = 0.0
+
+        'speed the pump runs at, falling back to the speed the curves were measured at
+        Public ReadOnly Property EffectiveSpeed As Double
+            Get
+                If OperatingSpeed > 0.0 Then Return OperatingSpeed
+                Return PumpCurveSet.ImpellerSpeed
+            End Get
+        End Property
 
         'proxy properties
 
@@ -535,6 +548,51 @@ Namespace UnitOperations
 
         End Sub
 
+        'interpolates a pump performance curve at the flow rate the pump is passing (m3/s), scaling the
+        'curve from the speed it was measured at to the speed the pump runs at. x holds the flow rate of
+        'each curve point and y the curve value, both in SI units. sratio is the operating speed over the
+        'speed the curve was measured at. Returns the curve value read at the equivalent flow, unscaled.
+        Private Function InterpolateCurve(x As List(Of Double), y As List(Of Double), qli As Double, curvename As String, sratio As Double) As Double
+
+            If x.Count = 0 Then
+                Throw New ArgumentException(String.Format("The pump {0} curve is enabled but has no data points.", curvename))
+            End If
+
+            'the barycentric weights are built for the nodes in ascending order,
+            'so the values must be reordered together with them.
+            Dim order = Enumerable.Range(0, x.Count).OrderBy(Function(i) x(i)).ToArray()
+            Dim xs = order.Select(Function(i) x(i)).ToArray()
+            Dim ys = order.Select(Function(i) y(i)).ToArray()
+
+            'the curve was measured at one speed and the pump may run at another, so the flow rates it
+            'can actually cover are the measured ones scaled by the speed ratio. Report the range in
+            'those terms: the equivalent flow rate on the measured curve is an internal quantity that
+            'appears nowhere in the user's flowsheet.
+            Dim qmin = xs.First() * sratio
+            Dim qmax = xs.Last() * sratio
+            Dim tol = (qmax - qmin) * 0.0001
+
+            If qli < qmin - tol Or qli > qmax + tol Then
+                Dim vunit = "m3/s"
+                Dim uom = FlowSheet?.FlowsheetOptions?.SelectedUnitSystem
+                If uom IsNot Nothing AndAlso uom.volumetricFlow <> "" Then vunit = uom.volumetricFlow
+                Dim atspeed = ""
+                If sratio <> 1.0 Then atspeed = String.Format(" at {0} RPM", EffectiveSpeed)
+                Throw New ArgumentException(String.Format("The pump is operating outside the range of its {0} curve{1} (flow rate: {2} {5}, curve range: {3} to {4} {5}).",
+                                                          curvename, atspeed,
+                                                          qli.ConvertFromSI(vunit), qmin.ConvertFromSI(vunit), qmax.ConvertFromSI(vunit), vunit))
+            End If
+
+            If xs.Length = 1 Then Return ys(0)
+
+            Dim w As Double() = Nothing
+
+            ratinterpolation.buildfloaterhormannrationalinterpolant(xs, xs.Length, 1, w)
+
+            Return polinterpolation.barycentricinterpolation(xs, ys, w, xs.Length, qli / sratio)
+
+        End Function
+
         Public Overrides Sub Calculate(Optional ByVal args As Object = Nothing)
 
             Dim IObj As Inspector.InspectorItem = Inspector.Host.GetNewInspectorItem()
@@ -548,15 +606,15 @@ Namespace UnitOperations
                             stream is used). In the first method, we have the following 
                             sequence:")
 
-            IObj?.Paragraphs.Add("• Outlet stream enthalpy:")
+            IObj?.Paragraphs.Add("ï¿½ Outlet stream enthalpy:")
 
             IObj?.Paragraphs.Add("<m>H_{2}=H_{1}+\frac{\Delta P}{\rho},</m>")
 
-            IObj?.Paragraphs.Add("• Pump discharge pressure:")
+            IObj?.Paragraphs.Add("ï¿½ Pump discharge pressure:")
 
             IObj?.Paragraphs.Add("<m>P_{2}=P_{1}+\Delta P</m>")
 
-            IObj?.Paragraphs.Add("• Pump required power:")
+            IObj?.Paragraphs.Add("ï¿½ Pump required power:")
 
             IObj?.Paragraphs.Add("<m>Pot=\frac{W(H_{2}-H_{1})}{\eta},</m>")
 
@@ -572,24 +630,24 @@ Namespace UnitOperations
 
             IObj?.Paragraphs.Add("<mi>\eta</mi> pump efficiency")
 
-            IObj?.Paragraphs.Add("• Outlet temperature: PH Flash (with P2 and H2).")
+            IObj?.Paragraphs.Add("ï¿½ Outlet temperature: PH Flash (with P2 and H2).")
 
             IObj?.Paragraphs.Add("In the second case (calculated outlet pressure), we have the 
                                 following sequence:")
 
-            IObj?.Paragraphs.Add("• Outlet stream enthalpy:")
+            IObj?.Paragraphs.Add("ï¿½ Outlet stream enthalpy:")
 
             IObj?.Paragraphs.Add("<m>H_{2}=H_{1}+\frac{Pot\,\eta}{W},</m>")
 
-            IObj?.Paragraphs.Add("• <mi>\Delta P</mi>:")
+            IObj?.Paragraphs.Add("ï¿½ <mi>\Delta P</mi>:")
 
             IObj?.Paragraphs.Add("<m>\Delta P=\rho(H_{2}-H_{1}),</m>")
 
-            IObj?.Paragraphs.Add("• Discharge pressure:")
+            IObj?.Paragraphs.Add("ï¿½ Discharge pressure:")
 
             IObj?.Paragraphs.Add("<m>P_{2}=P_{1}+\Delta P</m>")
 
-            IObj?.Paragraphs.Add("• Outlet temperature: PH Flash.")
+            IObj?.Paragraphs.Add("ï¿½ Outlet temperature: PH Flash.")
 
             If args Is Nothing Then
                 If Not Me.GraphicObject.OutputConnectors(0).IsAttached Then
@@ -686,8 +744,6 @@ Namespace UnitOperations
 
                 Case CalculationMode.Curves
 
-                    Dim cv As New SystemsOfUnits.Converter
-
                     Dim cnpsh, chead, ceff, cpower As PumpOps.Curve
 
                     cnpsh = Me.PumpCurveSet.CurveNPSHr
@@ -695,60 +751,66 @@ Namespace UnitOperations
                     ceff = Me.PumpCurveSet.CurveEfficiency
                     cpower = Me.PumpCurveSet.CurvePower
 
-                    Dim xhead, yhead, xnpsh, ynpsh, xeff, yeff, xpower, ypower, xsystem, ysystem As New ArrayList
+                    Dim xhead, yhead, xnpsh, ynpsh, xeff, yeff, xpower, ypower As New List(Of Double)
 
                     Dim i As Integer
 
-                    For i = 0 To chead.x.Count - 1
-                        If Double.TryParse(chead.x(i), New Double) And Double.TryParse(chead.y(i), New Double) Then
-                            xhead.Add(SystemsOfUnits.Converter.ConvertToSI(chead.xunit, chead.x(i)))
-                            yhead.Add(SystemsOfUnits.Converter.ConvertToSI(chead.yunit, chead.y(i)))
+                    For i = 0 To Math.Min(chead.x.Count, chead.y.Count) - 1
+                        xhead.Add(SystemsOfUnits.Converter.ConvertToSI(chead.xunit, chead.x(i)))
+                        yhead.Add(SystemsOfUnits.Converter.ConvertToSI(chead.yunit, chead.y(i)))
+                    Next
+                    For i = 0 To Math.Min(cnpsh.x.Count, cnpsh.y.Count) - 1
+                        xnpsh.Add(SystemsOfUnits.Converter.ConvertToSI(cnpsh.xunit, cnpsh.x(i)))
+                        ynpsh.Add(SystemsOfUnits.Converter.ConvertToSI(cnpsh.yunit, cnpsh.y(i)))
+                    Next
+                    For i = 0 To Math.Min(ceff.x.Count, ceff.y.Count) - 1
+                        xeff.Add(SystemsOfUnits.Converter.ConvertToSI(ceff.xunit, ceff.x(i)))
+                        If ceff.yunit = "%" Then
+                            yeff.Add(ceff.y(i) / 100)
+                        Else
+                            yeff.Add(ceff.y(i))
                         End If
                     Next
-                    For i = 0 To cnpsh.x.Count - 1
-                        If Double.TryParse(cnpsh.x(i), New Double) And Double.TryParse(cnpsh.y(i), New Double) Then
-                            xnpsh.Add(SystemsOfUnits.Converter.ConvertToSI(cnpsh.xunit, cnpsh.x(i)))
-                            ynpsh.Add(SystemsOfUnits.Converter.ConvertToSI(cnpsh.yunit, cnpsh.y(i)))
-                        End If
+                    For i = 0 To Math.Min(cpower.x.Count, cpower.y.Count) - 1
+                        xpower.Add(SystemsOfUnits.Converter.ConvertToSI(cpower.xunit, cpower.x(i)))
+                        ypower.Add(SystemsOfUnits.Converter.ConvertToSI(cpower.yunit, cpower.y(i)))
                     Next
-                    For i = 0 To ceff.x.Count - 1
-                        If Double.TryParse(ceff.x(i), New Double) And Double.TryParse(ceff.y(i), New Double) Then
-                            xeff.Add(SystemsOfUnits.Converter.ConvertToSI(ceff.xunit, ceff.x(i)))
-                            If ceff.yunit = "%" Then
-                                yeff.Add(ceff.y(i) / 100)
-                            Else
-                                yeff.Add(ceff.y(i))
-                            End If
-                        End If
-                    Next
-                    For i = 0 To cpower.x.Count - 1
-                        If Double.TryParse(cpower.x(i), New Double) And Double.TryParse(cpower.y(i), New Double) Then
-                            xpower.Add(SystemsOfUnits.Converter.ConvertToSI(cpower.xunit, cpower.x(i)))
-                            ypower.Add(SystemsOfUnits.Converter.ConvertToSI(cpower.yunit, cpower.y(i)))
-                        End If
-                    Next
-
-                    Dim w() As Double
 
                     If DebugMode Then AppendDebugLine(String.Format("Getting operating point..."))
 
                     'get operating points
-                    Dim head, npshr, eff, power, syshead As Double
+                    Dim head, npshr, eff, power As Double
+
+                    'the curves were measured at PumpCurveSet.ImpellerSpeed. Running at another speed,
+                    'the affinity laws put this operating point at qli/sratio on the measured curves,
+                    'and scale what is read there by sratio^2 for head and NPSHr and sratio^3 for power.
+                    'Efficiency is invariant along the affinity parabola.
+                    Dim sratio As Double = 1.0
+
+                    If OperatingSpeed > 0.0 Then
+                        If PumpCurveSet.ImpellerSpeed <= 0.0 Then
+                            Throw New ArgumentException("The pump has an operating speed but the speed its curves were measured at (Impeller Speed) is not defined, so the curves cannot be scaled.")
+                        End If
+                        sratio = OperatingSpeed / PumpCurveSet.ImpellerSpeed
+                    End If
+
+                    If DebugMode Then AppendDebugLine(String.Format("Speed ratio: {0} ({1} RPM over the {2} RPM the curves were measured at)", sratio, EffectiveSpeed, PumpCurveSet.ImpellerSpeed))
 
                     'head
-                    ReDim w(xhead.Count)
-                    ratinterpolation.buildfloaterhormannrationalinterpolant(xhead.ToArray(GetType(Double)), xhead.Count, 0.5, w)
-                    head = polinterpolation.barycentricinterpolation(xhead.ToArray(GetType(Double)), yhead.ToArray(GetType(Double)), w, xhead.Count, qli)
+                    If Not chead.Enabled Then
+                        Throw New ArgumentException("The head curve must be enabled to run the pump in Curves mode.")
+                    End If
+
+                    head = InterpolateCurve(xhead, yhead, qli, "head", sratio) * sratio ^ 2
 
                     If DebugMode Then AppendDebugLine(String.Format("Head: {0} m", head))
 
                     Me.CurveHead = head
+                    Me.CurveSysHead = head
 
                     'npshr
-                    If Me.PumpCurveSet.CurveNPSHr.Enabled Then
-                        ReDim w(xnpsh.Count)
-                        ratinterpolation.buildfloaterhormannrationalinterpolant(xnpsh.ToArray(GetType(Double)), xnpsh.Count, 0.5, w)
-                        npshr = polinterpolation.barycentricinterpolation(xnpsh.ToArray(GetType(Double)), ynpsh.ToArray(GetType(Double)), w, xnpsh.Count, qli)
+                    If cnpsh.Enabled Then
+                        npshr = InterpolateCurve(xnpsh, ynpsh, qli, "NPSHr", sratio) * sratio ^ 2
                     Else
                         npshr = 0
                     End If
@@ -758,19 +820,19 @@ Namespace UnitOperations
                     Me.CurveNPSHr = npshr
 
                     'efficiency
-                    If Me.PumpCurveSet.CurveEfficiency.Enabled Then
-                        ReDim w(xeff.Count)
-                        ratinterpolation.buildfloaterhormannrationalinterpolant(xeff.ToArray(GetType(Double)), xeff.Count, 0.5, w)
-                        eff = polinterpolation.barycentricinterpolation(xeff.ToArray(GetType(Double)), yeff.ToArray(GetType(Double)), w, xeff.Count, qli)
+                    If ceff.Enabled Then
+                        eff = InterpolateCurve(xeff, yeff, qli, "efficiency", sratio)
                     Else
                         eff = Me.Eficiencia.GetValueOrDefault / 100
+                    End If
+
+                    If eff <= 0.0 Then
+                        Throw New ArgumentException(String.Format("The pump efficiency at the operating point must be greater than zero (value: {0} %).", eff * 100))
                     End If
 
                     If DebugMode Then AppendDebugLine(String.Format("Efficiency: {0} %", eff * 100))
 
                     Me.CurveEff = eff * 100
-
-                    If DebugMode Then AppendDebugLine(String.Format("System Head: {0} m", syshead))
 
                     'we need -> head, power, eff, to calculate P2, H2, T2
 
@@ -786,15 +848,13 @@ Namespace UnitOperations
                     Dim tmp As IFlashCalculationResult
 
                     'power
-                    If Me.PumpCurveSet.CurvePower.Enabled Then
-                        ReDim w(xpower.Count)
-                        ratinterpolation.buildfloaterhormannrationalinterpolant(xpower.ToArray(GetType(Double)), xpower.Count, 0.5, w)
-                        power = polinterpolation.barycentricinterpolation(xpower.ToArray(GetType(Double)), ypower.ToArray(GetType(Double)), w, xpower.Count, qli)
-                        H2 = Hi + power * eff / Wi
+                    If cpower.Enabled Then
+                        power = InterpolateCurve(xpower, ypower, qli, "power", sratio) * sratio ^ 3
                     Else
-                        power = Wi * 9.81 * syshead / eff / 1000
-                        H2 = Hi + power * eff / Wi
+                        power = Wi * 9.81 * head / eff / 1000
                     End If
+
+                    H2 = Hi + power * eff / Wi
 
                     If DebugMode Then AppendDebugLine(String.Format("Power: {0} kW", power))
 
@@ -1160,6 +1220,9 @@ Namespace UnitOperations
                         value = Head.ConvertFromSI(su.distance)
                     Case 7
                         value = NPSH.GetValueOrDefault.ConvertFromSI(su.distance)
+                    Case 8
+                        'PROP_PU_8 (Operating Speed)
+                        value = EffectiveSpeed
                 End Select
 
                 Return value
@@ -1173,11 +1236,44 @@ Namespace UnitOperations
             Dim proplist As New ArrayList
             Dim basecol = MyBase.GetProperties(proptype)
             If basecol.Length > 0 Then proplist.AddRange(basecol)
-            For i = 0 To 7
-                proplist.Add("PROP_PU_" + CStr(i))
-            Next
+            'a property is only writable when the active calculation mode reads it. Every other one
+            'is overwritten by Calculate, so accepting a value for it would be silently ignored.
+            Dim writable As New List(Of Integer)
+            Select Case CalcMode
+                Case CalculationMode.Delta_P
+                    writable.AddRange(New Integer() {0, 1})
+                Case CalculationMode.OutletPressure
+                    writable.AddRange(New Integer() {1, 5})
+                Case CalculationMode.Power
+                    writable.AddRange(New Integer() {1, 3})
+                Case CalculationMode.EnergyStream
+                    'the power is read from the energy stream on inlet port 1, the same one
+                    'Calculate resolves through GetInletEnergyStream, when it is connected.
+                    writable.Add(1)
+                    If GraphicObject Is Nothing OrElse GraphicObject.InputConnectors.Count < 2 OrElse
+                       Not GraphicObject.InputConnectors(1).IsAttached Then writable.Add(3)
+                Case CalculationMode.Curves
+                    'the operating point comes from the curves, the inlet flow rate and the speed the
+                    'curves get scaled to, so the efficiency only remains a spec while there is no
+                    'efficiency curve to read it from.
+                    If Not PumpCurveSet.CurveEfficiency.Enabled Then writable.Add(1)
+                    writable.Add(8)
+            End Select
+            Select Case proptype
+                Case PropertyType.RO
+                    For i = 0 To 8
+                        If Not writable.Contains(i) Then proplist.Add("PROP_PU_" + CStr(i))
+                    Next
+                Case PropertyType.RW, PropertyType.WR
+                    For Each i In writable
+                        proplist.Add("PROP_PU_" + CStr(i))
+                    Next
+                Case PropertyType.ALL
+                    For i = 0 To 8
+                        proplist.Add("PROP_PU_" + CStr(i))
+                    Next
+            End Select
             Return proplist.ToArray(GetType(System.String))
-            proplist = Nothing
         End Function
 
         Public Overrides Function SetPropertyValue(ByVal prop As String, ByVal propval As Object, Optional ByVal su As Interfaces.IUnitsOfMeasure = Nothing) As Boolean
@@ -1199,6 +1295,9 @@ Namespace UnitOperations
                     Me.DeltaQ = SystemsOfUnits.Converter.ConvertToSI(su.heatflow, propval)
                 Case 5
                     Me.Pout = SystemsOfUnits.Converter.ConvertToSI(su.pressure, propval)
+                Case 8
+                    'PROP_PU_8 (Operating Speed)
+                    Me.OperatingSpeed = propval
             End Select
             Return 1
         End Function
@@ -1236,6 +1335,8 @@ Namespace UnitOperations
                         value = su.distance
                     Case 7
                         value = su.distance
+                    Case 8
+                        value = "rpm"
                 End Select
 
                 Return value
